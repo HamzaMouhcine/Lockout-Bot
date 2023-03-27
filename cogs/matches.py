@@ -81,7 +81,6 @@ class Matches(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        #await ctx.channel.send("Handles cog is ready")
         print("cogs matches is ready")
 
     def make_match_embed(self, ctx):
