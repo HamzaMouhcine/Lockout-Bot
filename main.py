@@ -32,7 +32,7 @@ class Client(commands.Bot):
     
     @commands.Cog.listener()
     async def on_ready(self):
-        await self.change_presence(activity=discord.Game(name="lool ⚔️"))
+        await self.change_presence(activity=discord.Game(name="Tournament ⚔️"))
 
     async def setup_hook(self): #overwriting a handler
         print(f"\033[31mLogged in as {client.user}\033[39m")
