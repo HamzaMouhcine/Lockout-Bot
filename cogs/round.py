@@ -162,6 +162,87 @@ class Round(commands.Cog):
 
         await ctx.send(embed=discord_.round_problems_embed(round_info))
 
+    @round.command(name="twovstwo", brief="a 2 v 2 round")
+    async def twovstwo(self, ctx,  *players: discord.Member):
+        
+        if len(players) != 3:
+            await discord_.send_message(ctx, f"{ctx.author.mention} the command is incorrect, here's the correct format: \n `.round: twovstwo @teammate @opponent_1 @opponent_2`")
+            return
+        
+        team2 = players[1:]
+        team1 = [ctx.author, players[0]]
+        all_players = team1
+        for x in team2 : 
+            team1.append(x) 
+
+
+        for i in all_players:
+            if not self.db.get_handle(ctx.guild.id, i.id):
+                await discord_.send_message(ctx, f"Handle for {i.mention} not set! Use `.handle identify` to register")
+                return
+            if self.db.in_a_round(ctx.guild.id, i.id):
+                await discord_.send_message(ctx, f"{i.mention} is already in a round!")
+                return
+
+        embed = discord.Embed(description=f"{' '.join(x.mention for x in all_players)} react on the message with ✅ within 30 seconds to join the round.",
+            color=discord.Color.purple())
+        message = await ctx.send(embed=embed)
+        await message.add_reaction("✅")
+
+        all_reacted = False
+        reacted = []
+
+        def check(reaction, user):
+            return reaction.message.id == message.id and reaction.emoji == "✅" and user in all_players
+
+        while True:
+            try:
+                reaction, user = await self.client.wait_for('reaction_add', timeout=30, check=check)
+                reacted.append(user)
+                if all(item in reacted for item in all_players):
+                    all_reacted = True
+                    break
+            except asyncio.TimeoutError:
+                break
+
+        if not all_reacted:
+            await discord_.send_message(ctx, f"Unable to start round, some participant(s) did not react in time!")
+            return
+
+        team1_name = await discord_.get_word_response(self.client, ctx, f"{ctx.author.mention} type `your team name`", 60, ctx.author)
+        if not team1_name:
+            await discord_.send_message(ctx, f"{ctx.author.mention} you took too long to decide")
+            return
+        team1_name = team1_name[1]
+
+        team2_name = await discord_.get_word_response(self.client, ctx, f"{ctx.author.mention} type `your opponent team's name`", 60, ctx.author)
+        if not team2_name:
+            await discord_.send_message(ctx, f"{ctx.author.mention} you took too long to decide")
+            return
+        team2_name = team2_name[1]
+
+        problem_cnt = 2
+        duration = 30
+        rating = [800, 900]
+        points = [100, 150]
+        repeat = 1
+        tournament = 0
+        
+
+        await ctx.send(embed=discord.Embed(description="Starting the round...", color=discord.Color.green()))
+
+        problems = await codeforces.find_problems([self.db.get_handle(ctx.guild.id, x.id) for x in all_players], rating)
+        if not problems[0]:
+            await discord_.send_message(ctx, problems[1])
+            return
+
+        problems = problems[1]
+
+        self.db.add_to_twovstwo_ongoing_round(ctx, all_players, rating, points, problems, duration, repeat, [], tournament, team1_name, team2_name)
+        round_info = self.db.get_round_info(ctx.guild.id, all_players[0].id)
+
+        await ctx.send(embed=discord_.round_problems_embed(round_info))
+
     @round.command(name="ongoing", brief="View ongoing rounds")
     async def ongoing(self, ctx):
         data = self.db.get_all_rounds(ctx.guild.id)
@@ -397,6 +478,46 @@ class Round(commands.Cog):
                                     await channel.send(embed=tournament_helper.tournament_over_embed(round_info.guild, winner_handle, self.db))
                                     self.db.add_to_finished_tournaments(self.db.get_tournament_info(round_info.guild), winner_handle)
                                     self.db.delete_tournament(round_info.guild)
+
+            except Exception as e:
+                logging_channel = await self.client.fetch_channel(os.environ.get("LOGGING_CHANNEL"))
+                await logging_channel.send(f"Error while updating rounds: {str(traceback.format_exc())}")
+
+    @round.command(brief="Update 2v2 matches status for the server")
+    @cooldown(1, AUTO_UPDATE_TIME, BucketType.guild)
+    async def update2v2(self, ctx):
+        await ctx.send(embed=discord.Embed(description="Updating 2v2 rounds for this server", color=discord.Color.green()))
+        rounds = self.db.get_all_rounds(ctx.guild.id)
+
+        for round in rounds:
+            try:
+                resp = await updation.update_2v2_round(round)
+                if not resp[0]:
+                    logging_channel = await self.client.fetch_channel(os.environ.get("LOGGING_CHANNEL"))
+                    await logging_channel.send(f"Error while updating rounds: {resp[1]}")
+                    continue
+                resp = resp[1]
+                channel = self.client.get_channel(round.channel)
+
+                if resp[2] or resp[1]:
+                    await channel.send(f"{' '.join([(await discord_.fetch_member(ctx.guild, int(m))).mention for m in round.users.split()])} there is an update in standings")
+
+                for i in range(len(resp[0])):
+                    if len(resp[0][i]):
+                        await channel.send(embed=discord.Embed(
+                            description=f"{' '.join([(await discord_.fetch_member(ctx.guild, m)).mention for m in resp[0][i]])} has solved problem worth **{round.points.split()[i]}** points",
+                            color=discord.Color.blue()))
+
+                if not resp[1] and resp[2]:
+                    new_info = self.db.get_round_info(round.guild, round.users)
+                    await channel.send(embed=discord_.round_2v2_problems_embed(new_info))
+
+                if resp[1]:
+                    round_info = self.db.get_round_info(round.guild, round.users)
+                    embed=discord_.round_2v2_problems_embed(round_info)
+                    embed.set_author(name=f"Round over! Final standings")
+                    embed.set_footer(text=f"")
+                    await channel.send(embed=embed)
 
             except Exception as e:
                 logging_channel = await self.client.fetch_channel(os.environ.get("LOGGING_CHANNEL"))

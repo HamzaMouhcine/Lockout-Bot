@@ -96,7 +96,9 @@ class DbConn:
                             duration BIGINT,
                             repeat BIGINT,
                             times TEXT,
-                            tournament BIGINT
+                            tournament BIGINT,
+                            teama TEXT,
+                            teamb TEXT
                     )
                     """)
         cmds.append("""
@@ -563,17 +565,32 @@ class DbConn:
             return True
         return False
 
-    def add_to_ongoing_round(self, ctx, users, rating, points, problems, duration, repeat, alts, tournament=0):
+    def add_to_ongoing_round(self, ctx, users, rating, points, problems, duration, repeat, alts, tournament=0, teama_name="Team A", teamb_name="Team B"):
         query = f"""
                     INSERT INTO ongoing_rounds
                     VALUES
-                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
         curr = self.conn.cursor()
         curr.execute(query, (ctx.guild.id, ' '.join([f"{x.id}" for x in users]), ' '.join(map(str, rating)),
                              ' '.join(map(str, points)), int(time.time()), ctx.channel.id,
                              ' '.join([f"{x.id}/{x.index}" for x in problems]), ' '.join('0' for i in range(len(users))),
-                             duration, repeat, ' '.join(['0'] * len(users)), tournament))
+                             duration, repeat, ' '.join(['0'] * len(users)), tournament, teama_name, teamb_name))
+        self.add_to_alt_table(ctx, users, alts)
+        self.conn.commit()
+        curr.close()
+
+    def add_to_twovstwo_ongoing_round(self, ctx, users, rating, points, problems, duration, repeat, alts, tournament=0, teama_name="Team A", teamb_name="Team B"):
+        query = f"""
+                    INSERT INTO ongoing_rounds
+                    VALUES
+                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+        curr = self.conn.cursor()
+        curr.execute(query, (ctx.guild.id, ' '.join([f"{x.id}" for x in users]), ' '.join(map(str, rating)),
+                             ' '.join(map(str, points)), int(time.time()), ctx.channel.id,
+                             ' '.join([f"{x.id}/{x.index}" for x in problems]), ' '.join('0' for i in range(2)),
+                             duration, repeat, ' '.join(['0'] * len(users)), tournament, teama_name, teamb_name))
         self.add_to_alt_table(ctx, users, alts)
         self.conn.commit()
         curr.close()
@@ -616,8 +633,8 @@ class DbConn:
         curr.execute(query, (guild, f"%{users}%"))
         data = curr.fetchone()
         curr.close()
-        Round = namedtuple('Round', 'guild users rating points time channel problems status duration repeat times, tournament')
-        return Round(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11])
+        Round = namedtuple('Round', 'guild users rating points time channel problems status duration repeat times, tournament teama teamb')
+        return Round(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11], data[12], data[13])
 
     def get_all_rounds(self, guild=None):
         query = f"""
@@ -629,8 +646,8 @@ class DbConn:
         curr.execute(query)
         res = curr.fetchall()
         curr.close()
-        Round = namedtuple('Round', 'guild users rating points time channel problems status duration repeat times, tournament')
-        return [Round(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11]) for data in res]
+        Round = namedtuple('Round', 'guild users rating points time channel problems status duration repeat times, tournament, teama, teamb')
+        return [Round(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11], data[12], data[13]) for data in res]
 
     def update_round_status(self, guild, user, status, problems, timestamp):
         query = f"""

@@ -181,3 +181,64 @@ async def update_round(round_info):
     if not judging and (enter_time > round_info.time + 60 * round_info.duration or (round_info.repeat == 0 and no_round_change_possible(status[:], points, problems))):
         over = True
     return [True, [updates, over, updated]]
+
+async def update_2v2_round(round_info):
+    users = list(map(int, round_info.users.split()))
+    handles = [db.get_handle(round_info.guild, user) for user in users]
+    rating = list(map(int, round_info.rating.split()))
+    enter_time = time.time()
+    points = list(map(int, round_info.points.split()))
+    status = list(map(int, round_info.status.split()))
+    timestamp = list(map(int, round_info.times.split()))
+    subs = [await cf.get_user_problems(handle, RECENT_SUBS_LIMIT) for handle in handles]
+    for sub in subs:
+        if not sub[0]:
+            return sub
+
+    subs = [sub[1] for sub in subs]
+    judging, over, updated = False, False, False
+    problems = round_info.problems.split()
+
+    updates = []
+
+    for i in range(len(problems)):
+        if problems[i] == '0':
+            updates.append([])
+            continue
+
+        times = [codeforces.get_solve_time(sub, int(problems[i].split('/')[0]), problems[i].split('/')[1]) for sub in subs]
+
+        if any([_ == -1 for _ in times]):
+            judging = True
+            updates.append([])
+            continue
+
+        solved = []
+        for j in range(len(users)):
+            if times[j] == min(times) and times[j] <= round_info.time + 60 * round_info.duration:
+                solved.append(users[j])
+                if j <= 1:
+                    status[0] += points[i]
+                else: 
+                    status[1] += points[i]
+                
+                problems[i] = '0'
+                timestamp[j] = max(timestamp[j], min(times))
+                updated = True
+
+        updates.append((solved))
+
+        if len(solved) > 0 and round_info.repeat == 1:
+            res = await codeforces.find_problems(handles+db.fetch_alts(round_info.guild, users[0]), [rating[i]])
+            if not res[0]:
+                new_problem = '0'
+            else:
+                new_problem = f"{res[1][0].id}/{res[1][0].index}"
+            problems[i] = new_problem
+
+    if updated:
+        db.update_round_status(round_info.guild, users[0], status, problems, timestamp)
+
+    if not judging and (enter_time > round_info.time + 60 * round_info.duration or (round_info.repeat == 0 and no_round_change_possible(status[:], points, problems))):
+        over = True
+    return [True, [updates, over, updated]]

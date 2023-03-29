@@ -61,6 +61,18 @@ async def get_time_response(client, ctx, message, time, author, range_):
         await original.delete()
         return [False]
 
+async def get_word_response(client, ctx, message, time, author):
+    original = await ctx.send(embed=discord.Embed(description=message, color=discord.Color.green()))
+
+    def check(m):
+        return m.author == author
+    try:
+        msg = await client.wait_for('message', timeout=time, check=check)
+        await original.delete()
+        return [True, msg.content]
+    except asyncio.TimeoutError:
+        await original.delete()
+        return [False]
 
 async def get_seq_response(client, ctx, message, time, length, author, range_):
     original = await ctx.send(embed=discord.Embed(description=message, color=discord.Color.green()))
@@ -85,6 +97,47 @@ async def get_seq_response(client, ctx, message, time, length, author, range_):
     except asyncio.TimeoutError:
         await original.delete()
         return [False]
+
+
+async def get_twovstwo_response(client, ctx, message, time, author):
+    original = await ctx.send(embed=discord.Embed(description=message, color=discord.Color.green()))
+
+    async def check(m):
+        if m.author != author:
+            return False
+
+        data = m.content.split()
+        if data[0].lower() != "players:":
+            return False
+        data = data[1:]
+        print(len(data))
+        if len(data) != 3:
+            return False
+        handles = []
+        for i in data:
+            resp = await cf.check_handle((i))
+            if not resp[0]:
+                print("here?")
+                return False
+            handles.append(resp[1]['handle'])
+        print("or here")
+        print(handles)
+        return True, handles
+
+    def check1(m):
+        return m.author == author and m.channel.id == ctx.channel.id
+
+    while True:
+        try:
+            msg = await client.wait_for('message', timeout=time, check=check1)
+            res = await check(msg)
+            if not res:
+                continue
+            await original.delete()
+            return True, res[1]
+        except asyncio.TimeoutError:
+            await original.delete()
+            return False
 
 
 async def get_alt_response(client, ctx, message, limit, time, author):
@@ -206,7 +259,36 @@ def recent_matches_embed(data):
 
 
 def round_problems_embed(round_info):
+
+    problems = round_info.problems.split()
+    names = [f"[{db.get_problems(problems[i])[0].name}](https://codeforces.com/contest/{problems[i].split('/')[0]}"
+             f"/problem/{problems[i].split('/')[1]})" if problems[i] != '0' else "This problem has been solved" if
+             round_info.repeat == 0 else "No problems of this rating left" for i in range(len(problems))]
+
+    sts = round_info.status.split()
+    desc = ""
+    emojis = [":first_place:", ":second_place:"]
+    if sts[0] > sts[1]:
+        desc += f"{emojis[0]} [{round_info.teama}] **{sts[0]}** points\n"    
+        desc += f"{emojis[1]} [{round_info.teamb}] **{sts[1]}** points\n"    
+    else:
+        desc += f"{emojis[0]} [{round_info.teama}] **{sts[1]}** points\n"    
+        desc += f"{emojis[1]} [{round_info.teamb}] **{sts[0]}** points\n"    
+
+    embed = discord.Embed(description=desc, color=discord.Color.magenta())
+    embed.set_author(name=f"Problems")
+
+    embed.add_field(name="Points", value='\n'.join(round_info.points.split()), inline=True)
+    embed.add_field(name="Problem Name", value='\n'.join(names), inline=True)
+    embed.add_field(name="Rating", value='\n'.join(round_info.rating.split()), inline=True)
+    embed.set_footer(text=f"Time left: {timeez((round_info.time + 60 * round_info.duration) - int(time.time()))}")
+
+    return embed
+
+def round_2v2_problems_embed(round_info):
     ranklist = round_score(list(map(int, round_info.users.split())), list(map(int, round_info.status.split())), list(map(int, round_info.times.split())))
+    
+    sts = round_info.status.split()
 
     problems = round_info.problems.split()
     names = [f"[{db.get_problems(problems[i])[0].name}](https://codeforces.com/contest/{problems[i].split('/')[0]}"
@@ -214,11 +296,14 @@ def round_problems_embed(round_info):
              round_info.repeat == 0 else "No problems of this rating left" for i in range(len(problems))]
 
     desc = ""
-    for user in ranklist:
-        emojis = [":first_place:", ":second_place:", ":third_place:"]
-        handle = db.get_handle(round_info.guild, user.id)
-        desc += f"{emojis[user.rank-1] if user.rank <= len(emojis) else user.rank} [{handle}](https://codeforces.com/profile/{handle}) **{user.points}** points\n"
-
+    emojis = [":first_place:", ":second_place:"]
+    if sts[0] > sts[1]:
+        desc += f"{emojis[0]} [{round_info.teama}] **{sts[0]}** points\n"    
+        desc += f"{emojis[1]} [{round_info.teamb}] **{sts[1]}** points\n"    
+    else:
+        desc += f"{emojis[0]} [{round_info.teama}] **{sts[1]}** points\n"    
+        desc += f"{emojis[1]} [{round_info.teamb}] **{sts[0]}** points\n"    
+    
     embed = discord.Embed(description=desc, color=discord.Color.magenta())
     embed.set_author(name=f"Problems")
 
