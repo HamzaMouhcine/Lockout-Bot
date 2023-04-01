@@ -222,7 +222,7 @@ class Round(commands.Cog):
         team2_name = team2_name[1]
 
         problem_cnt = 2
-        duration = 30
+        duration = 45
         rating = [800, 900]
         points = [100, 150]
         repeat = 1

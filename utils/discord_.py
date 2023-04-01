@@ -286,8 +286,6 @@ def round_problems_embed(round_info):
     return embed
 
 def round_2v2_problems_embed(round_info):
-    ranklist = round_score(list(map(int, round_info.users.split())), list(map(int, round_info.status.split())), list(map(int, round_info.times.split())))
-    
     sts = round_info.status.split()
 
     problems = round_info.problems.split()
@@ -301,8 +299,8 @@ def round_2v2_problems_embed(round_info):
         desc += f"{emojis[0]} [{round_info.teama}] **{sts[0]}** points\n"    
         desc += f"{emojis[1]} [{round_info.teamb}] **{sts[1]}** points\n"    
     else:
-        desc += f"{emojis[0]} [{round_info.teama}] **{sts[1]}** points\n"    
-        desc += f"{emojis[1]} [{round_info.teamb}] **{sts[0]}** points\n"    
+        desc += f"{emojis[0]} [{round_info.teamb}] **{sts[1]}** points\n"    
+        desc += f"{emojis[1]} [{round_info.teama}] **{sts[0]}** points\n"    
     
     embed = discord.Embed(description=desc, color=discord.Color.magenta())
     embed.set_author(name=f"Problems")
